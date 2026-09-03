@@ -1,8 +1,25 @@
-"""Ollama-backed question generation and answer analysis.
+"""Anthropic-backed question generation and answer analysis.
 
-Talks to a locally running Ollama server (https://ollama.com) over its HTTP
-API. Requires `ollama serve` to be running and the configured model pulled
-(e.g. `ollama pull llama3.2`) before any of this will work.
+Talks to the Anthropic API (https://docs.claude.com) over HTTPS. Requires
+the ANTHROPIC_API_KEY environment variable to be set before any of this
+will work.
+
+This module previously talked to a locally running Ollama server -- that
+constrained the app to running only on the machine it's demoed on, since
+no free cloud host runs Ollama for you (and even if one did, a local LLM
+needs far more RAM than a free-tier instance provides). Switching to a
+cloud API is what makes this app deployable to something like Render.
+
+The JSON-parsing/repair helpers below (_extract_json,
+_attempt_close_truncated_json, etc.) were written to work around specific
+failure modes of a small local model (llama3.2) run on CPU -- truncated
+output from a token cap, occasionally malformed JSON, echoing the
+candidate's answer back as the "improvement". Claude is meaningfully more
+reliable at following "respond with strict JSON only" instructions, so in
+practice these should fire far less often -- but they're left in place as
+a defensive safety net rather than removed, since they cost nothing when
+unused and still protect against a truncated/malformed response under
+this backend too (e.g. from a transient API hiccup).
 """
 
 import json
@@ -11,17 +28,45 @@ import os
 import re
 import time
 
-import requests
+import anthropic
 
 log = logging.getLogger("interview_app")
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
-REQUEST_TIMEOUT = int(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "90"))
-OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+# Haiku is the default here rather than a larger model: this app makes many
+# small, structured calls per session (a question, then hints, then a score
+# + feedback, repeated per question, plus a final summary) rather than a
+# few large ones, so per-call cost and latency matter more than squeezing
+# out extra reasoning quality on a task this constrained (a 0-10 score and
+# a few short JSON fields). Override via env var to use a larger model.
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+REQUEST_TIMEOUT = int(os.environ.get("ANTHROPIC_REQUEST_TIMEOUT", "90"))
 
-# Output-length caps per call. Generation latency on CPU is roughly linear in
-# token count, so these are the main levers for tuning speed vs. detail.
+_client = None
+
+
+def _get_client():
+    """Lazily construct the Anthropic client so a missing API key fails
+    with a clear error on first real use rather than crashing at import
+    time (matters for warm_up(), which is called in a background thread
+    at startup and must not take the whole app down if misconfigured)."""
+    global _client
+    if _client is None:
+        if not ANTHROPIC_API_KEY:
+            raise OllamaError(
+                "ANTHROPIC_API_KEY is not set. Set it in your environment "
+                "(or .env locally) before starting the app."
+            )
+        _client = anthropic.Anthropic(
+            api_key=ANTHROPIC_API_KEY,
+            timeout=REQUEST_TIMEOUT,
+        )
+    return _client
+
+# Output-length caps per call, passed through as each API call's max_tokens.
+# These matter less for latency with a cloud API than they did on local CPU
+# hardware, but they still cap cost per call and give _extract_json's
+# truncation-repair path a concrete ceiling to reason about.
 # ANALYSIS_NUM_PREDICT must be large enough to fit the *entire* JSON object
 # (score + strengths + suggestions + improved_answer) -- if the model hits
 # this cap mid-string, the JSON is truncated/invalid and _generate_json has
@@ -78,62 +123,101 @@ FILLER_WORDS = [
 
 
 class OllamaError(RuntimeError):
-    """Raised when the Ollama server can't be reached or returns bad output."""
+    """Raised when the AI backend can't be reached or returns bad output.
+
+    Kept under its original name (from when this module talked to a local
+    Ollama server) for compatibility with existing `except
+    ai_analyzer.OllamaError` handlers in app.py and interview.py -- renaming
+    it would mean touching both of those files for no functional benefit.
+    """
 
 
-def _ollama_generate(prompt, system, num_predict=200, format_schema=None):
-    """format_schema: optional Ollama structured-output JSON Schema. Plain
-    "format": "json" only guarantees *some* syntactically valid JSON -- it
-    does not stop the model from putting a bare number where a string was
-    expected (observed in practice: 'improved_answer' generated as an
-    unquoted -1 instead of a quoted string). Passing an actual schema
-    grammar-constrains each field to its real type, which is a much
-    stronger guarantee than prompt wording alone can give."""
+def _anthropic_generate(prompt, system, num_predict=200, format_schema=None):
+    """format_schema: optional JSON Schema describing the required output
+    shape. When given, this is enforced via Claude's tool-use with a forced
+    tool choice -- the model must call a "submit_result" tool whose
+    arguments are grammar-constrained to the schema, so (for example) it's
+    structurally impossible for it to emit a bare, unquoted -1 in place of
+    a real string for "improved_answer" (an actual observed failure under
+    the previous backend). When no schema is given, the call instead relies
+    on system-prompt wording ("respond with strict JSON only") the same way
+    the previous Ollama "format": "json" mode did, and the response text is
+    parsed by _extract_json exactly as before."""
     start = time.monotonic()
+    client = _get_client()
+
     try:
-        response = requests.post(
-            f"{OLLAMA_HOST}/api/generate",
-            json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "system": system,
-                "stream": False,
-                "format": format_schema if format_schema is not None else "json",
-                # Capping output length is the single biggest lever on local
-                # generation latency, since it's roughly linear in token count.
-                "options": {"num_predict": num_predict},
-                # Ollama unloads a model after ~5 min idle by default; keep it
-                # resident so a pause mid-demo doesn't trigger a slow reload.
-                "keep_alive": OLLAMA_KEEP_ALIVE,
-            },
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-    except requests.exceptions.ConnectionError as exc:
-        log.error("Ollama unreachable at %s", OLLAMA_HOST)
+        if format_schema is not None:
+            response = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=max(num_predict, 16),
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+                tools=[{
+                    "name": "submit_result",
+                    "description": "Submit the structured result for this request.",
+                    "input_schema": format_schema,
+                }],
+                tool_choice={"type": "tool", "name": "submit_result"},
+            )
+
+            tool_use = next(
+                (block for block in response.content if block.type == "tool_use"),
+                None,
+            )
+
+            if tool_use is None:
+                raise OllamaError(
+                    "Model response did not include the expected tool call."
+                )
+
+            raw_text = json.dumps(tool_use.input)
+
+        else:
+            response = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=max(num_predict, 16),
+                system=f"{system} Respond with strict JSON only, no other text.",
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            raw_text = "".join(
+                block.text for block in response.content if block.type == "text"
+            )
+
+    except anthropic.APIConnectionError as exc:
+        log.error("Anthropic API unreachable: %s", exc)
         raise OllamaError(
-            f"Couldn't reach Ollama at {OLLAMA_HOST}. Make sure 'ollama serve' is running "
-            f"and you've pulled the model with 'ollama pull {OLLAMA_MODEL}'."
+            "Couldn't reach the Anthropic API. Check your network connection "
+            "and that ANTHROPIC_API_KEY is set correctly."
         ) from exc
-    except requests.exceptions.RequestException as exc:
-        log.error("Ollama request failed: %s", exc)
-        raise OllamaError(f"Ollama request failed: {exc}") from exc
+    except anthropic.AuthenticationError as exc:
+        log.error("Anthropic API authentication failed: %s", exc)
+        raise OllamaError(
+            "Anthropic API authentication failed. Check that ANTHROPIC_API_KEY "
+            "is set to a valid key."
+        ) from exc
+    except anthropic.APIError as exc:
+        log.error("Anthropic API request failed: %s", exc)
+        raise OllamaError(f"Anthropic API request failed: {exc}") from exc
 
     elapsed = time.monotonic() - start
-    log.info("Ollama call done in %.1fs (num_predict=%d)", elapsed, num_predict)
-    return response.json().get("response", "")
+    log.info("Anthropic call done in %.1fs (max_tokens=%d)", elapsed, num_predict)
+    return raw_text
 
 
 def _extract_json(raw_text):
     """Find and parse the first complete top-level JSON object in raw_text.
 
-    Ollama's JSON mode is usually clean, but this small model sometimes
-    appends extra malformed text/blobs after a perfectly valid object (e.g.
-    two questions concatenated together), or gets cut off mid-object by the
-    num_predict token cap. A naive greedy '{.*}' regex breaks on the first
-    case (it spans into the garbage and fails to parse) and can't help with
-    the second, so this scans for the first object's *matching* closing
-    brace (respecting string/escape context) instead."""
+    This was written against a small local model's quirks (occasionally
+    appending extra malformed text/blobs after a perfectly valid object, or
+    getting cut off mid-object by the token cap) and is far less likely to
+    be needed against Claude -- but it's kept as a defensive fallback, since
+    a naive greedy '{.*}' regex would still break the same two ways if it
+    ever did happen: it breaks on trailing garbage (spans into it and fails
+    to parse) and can't help with mid-object truncation. Scanning for the
+    first object's *matching* closing brace (respecting string/escape
+    context) handles both."""
     brace_start = raw_text.find("{")
     if brace_start == -1:
         raise OllamaError(f"Model did not return parseable JSON: {raw_text[:200]!r}")
@@ -229,24 +313,27 @@ def _generate_json(prompt, system, num_predict, format_schema=None):
     response — local models occasionally produce a malformed reply, and a
     single retry meaningfully improves reliability without adding much delay."""
     try:
-        return _extract_json(_ollama_generate(prompt, system, num_predict, format_schema))
+        return _extract_json(_anthropic_generate(prompt, system, num_predict, format_schema))
     except OllamaError as exc:
         log.warning("Retrying after bad response: %s", exc)
-        return _extract_json(_ollama_generate(prompt, system, num_predict, format_schema))
+        return _extract_json(_anthropic_generate(prompt, system, num_predict, format_schema))
 
 
 def warm_up():
-    """Send a trivial generation request so the model is loaded into memory
-    before the first real request comes in. Call once at app startup (in a
-    background thread) to avoid a slow cold-start during a live demo."""
-    log.info("Warming up Ollama model %s...", OLLAMA_MODEL)
+    """Send a trivial request at startup to fail fast on misconfiguration
+    (missing/invalid ANTHROPIC_API_KEY, no network) rather than surfacing
+    that as a confusing error on a candidate's first real interview
+    question. There's no local model to "load" with a cloud API, but this
+    is still worth calling once at app startup (in a background thread) --
+    it catches setup problems immediately instead of mid-demo."""
+    log.info("Verifying Anthropic API connectivity (model=%s)...", ANTHROPIC_MODEL)
     try:
-        _ollama_generate(
+        _anthropic_generate(
             "Reply with {\"ok\": true}",
             "Respond with strict JSON only.",
             num_predict=WARMUP_NUM_PREDICT,
         )
-        log.info("Ollama model warm and ready.")
+        log.info("Anthropic API reachable and ready.")
     except OllamaError as exc:
         log.warning("Warm-up failed (will retry on first real request): %s", exc)
 
@@ -281,12 +368,13 @@ def generate_question(role, difficulty, category, personality, previous_question
     # Single retry budget of 3 raw calls total, covering both unparseable JSON
     # and valid-but-empty JSON (e.g. {"question": ""}) in one loop -- stacking
     # _generate_json's own internal retry on top of an outer retry here would
-    # allow up to 6 sequential Ollama calls in the worst case, which on
-    # CPU-only hardware can take minutes.
+    # allow up to 6 sequential API calls in the worst case -- each one is
+    # fast against Claude, but this still bounds the total worst-case
+    # latency and cost for generating a single question.
     log.info("Generating %s question: role=%s difficulty=%s category=%s", "starter" if not previous_questions else "follow-up", role, difficulty, category)
     for attempt in range(QUESTION_GENERATION_ATTEMPTS):
         try:
-            data = _extract_json(_ollama_generate(prompt, system, num_predict=QUESTION_NUM_PREDICT))
+            data = _extract_json(_anthropic_generate(prompt, system, num_predict=QUESTION_NUM_PREDICT))
         except OllamaError as exc:
             log.warning(
                 "Question generation attempt %d/%d failed to parse: %s",
@@ -400,12 +488,14 @@ GENERIC_FALLBACK_HINTS = [
 ]
 
 
-# Structured-output schema for analyze_answer, passed as Ollama's "format"
-# instead of the plain "json" string. This grammar-constrains each field to
-# its declared type at generation time -- e.g. it makes it structurally
-# impossible for the model to emit a bare, unquoted -1 in place of a real
-# string for "improved_answer" (an actual observed failure), since the
-# grammar requires a string token there, not just "valid JSON somewhere".
+# Structured-output schema for analyze_answer, enforced via Claude's
+# tool-use (see _anthropic_generate) rather than relying on prompt wording
+# alone. This grammar-constrains each field to its declared type at
+# generation time -- e.g. it makes it structurally impossible for the model
+# to emit a bare, unquoted -1 in place of a real string for
+# "improved_answer" (an actual observed failure under the previous local-
+# model backend), since the schema requires a string token there, not just
+# "valid JSON somewhere".
 ANALYSIS_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -423,11 +513,11 @@ def analyze_answer(role, question, answer, personality):
     # question-relevant feedback even for near-empty input (e.g. scoring a
     # literal "answer" placeholder 8/10 with specific praise) -- rather than
     # trust the model to recognize a non-answer, catch it deterministically
-    # before spending an Ollama call on something with nothing to evaluate.
+    # before spending an API call on something with nothing to evaluate.
     word_count = len(re.findall(r"[A-Za-z0-9]+", answer))
     if word_count < MIN_ANSWER_WORDS:
         log.info(
-            "Answer too short (%d words, need %d) -- skipping Ollama call for: %s",
+            "Answer too short (%d words, need %d) -- skipping API call for: %s",
             word_count, MIN_ANSWER_WORDS, question[:80],
         )
         return {

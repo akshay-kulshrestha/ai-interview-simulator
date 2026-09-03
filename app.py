@@ -288,4 +288,4 @@ database.init_db()
 threading.Thread(target=ai_analyzer.warm_up, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(debug=FLASK_DEBUG, port=DEFAULT_PORT, threaded=True)
+    app.run(host="0.0.0.0", debug=FLASK_DEBUG, port=DEFAULT_PORT, threaded=True)
