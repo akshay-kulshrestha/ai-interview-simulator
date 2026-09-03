@@ -49,6 +49,7 @@ per answer.
 | Frontend | Jinja2 templates, custom CSS/JS |
 
 ## Project structure
+
 ai_interview_simulator/
 ├── app.py # Flask app, routes
 ├── ai_analyzer.py # AI scoring/feedback logic (talks to Ollama)
@@ -68,3 +69,51 @@ ai_interview_simulator/
 │ └── history.html # Past session history
 ├── reports/ # Generated PDF reports
 └── data/ # SQLite database (created at runtime)
+
+
+## Setup
+
+### 1. Install dependencies
+
+pip install -r requirements.txt
+
+
+### 2. Set up environment variables
+
+Copy `env.example` to `.env` and fill in any required values.
+
+copy env.example .env
+
+
+### 3. Install and start Ollama
+
+This project runs its AI analysis locally via [Ollama](https://ollama.com).
+
+winget install Ollama.Ollama
+
+
+In one terminal window, start the Ollama server (leave this running):
+
+ollama serve
+
+
+In a separate terminal, pull the model this project uses:
+
+ollama pull llama3.2
+
+
+### 4. Run the app
+
+python app.py
+
+
+Then open `http://127.0.0.1:5001` in your browser.
+
+## Notes
+
+- The app expects Ollama to be running at `http://localhost:11434` — if
+  you see a "warm-up failed" or "Ollama unreachable" error on startup,
+  make sure `ollama serve` is running and `llama3.2` has been pulled.
+- `.env`, the SQLite database, and `__pycache__/` are excluded from
+  version control via `.gitignore` — they're either secrets or
+  regenerated automatically at runtime.
