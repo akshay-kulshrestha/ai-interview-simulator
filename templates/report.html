@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Report - {{ report.session.role }}{% endblock %}
+{% block content %}
+
+{% set session = report.session %}
+
+{% if session.status != 'completed' %}
+<div class="card empty-state">
+    <span class="icon-box"><i data-lucide="hourglass" class="icon"></i></span>
+    <h1>This interview isn't finished yet</h1>
+    <a class="btn-primary" style="margin-top:16px;" href="{{ url_for('interview_page', session_id=session.id) }}">Continue it</a>
+</div>
+{% else %}
+
+{% set pct = report.percentage %}
+{% set grade_gradient = {
+    'emerald': 'linear-gradient(135deg,#10b981,#14b8a6)',
+    'blue': 'linear-gradient(135deg,#2563eb,#06b6d4)',
+    'amber': 'linear-gradient(135deg,#f59e0b,#f97316)',
+    'red': 'linear-gradient(135deg,#ef4444,#f43f5e)',
+}[report.grade_color] %}
+{% set grade_text = {'emerald': 'var(--emerald-text)', 'blue': 'var(--primary)', 'amber': 'var(--amber-text)', 'red': 'var(--red)'}[report.grade_color] %}
+
+<div class="report-header animate-fade-in">
+    <span class="icon-box" style="background:{{ grade_gradient }};"><i data-lucide="award" class="icon"></i></span>
+    <h1>Interview Complete</h1>
+    <p class="sub">{{ session.role }} &middot; {{ session.difficulty|capitalize }} difficulty</p>
+</div>
+
+{% set ring = score_ring(session.overall_score, 10, 140, 10) %}
+<div class="card score-summary animate-slide-up">
+    <div class="left">
+        <div class="score-ring-wrap" style="width:{{ ring.size }}px;height:{{ ring.size }}px;">
+            <svg width="{{ ring.size }}" height="{{ ring.size }}">
+                <circle cx="{{ ring.center }}" cy="{{ ring.center }}" r="{{ ring.radius }}" fill="none" stroke="var(--ring-track)" stroke-width="{{ ring.stroke }}"></circle>
+                <circle cx="{{ ring.center }}" cy="{{ ring.center }}" r="{{ ring.radius }}" fill="none" stroke="{{ ring.color }}" stroke-width="{{ ring.stroke }}"
+                    stroke-dasharray="{{ ring.circumference }}" stroke-dashoffset="{{ ring.offset }}" stroke-linecap="round"></circle>
+            </svg>
+            <div class="center">
+                <span class="val" style="color:{{ ring.color }};font-size:{{ (ring.size * 0.22)|round(0) }}px;">{{ "%.1f"|format(session.overall_score) }}</span>
+                <span class="max">/ 10</span>
+                <span class="lbl">Overall</span>
+            </div>
+        </div>
+        <p class="grade" style="color:{{ grade_text }};">{{ report.grade_label }}</p>
+    </div>
+    <div class="stat-mini-grid">
+        <div class="stat-mini"><i data-lucide="list-checks" class="icon"></i><div class="val">{{ report.answers|length }}</div><div class="lbl">Questions</div></div>
+        <div class="stat-mini"><i data-lucide="trending-up" class="icon"></i><div class="val">{{ "%.1f"|format(session.overall_score) }}/10</div><div class="lbl">Avg Score</div></div>
+        <div class="stat-mini"><i data-lucide="percent" class="icon"></i><div class="val">{{ pct }}%</div><div class="lbl">Percentage</div></div>
+    </div>
+</div>
+
+{% if report.best_answer or report.worst_answer %}
+<div class="highlight-grid">
+    {% if report.best_answer %}
+    <div class="card highlight-card best">
+        <div class="top-row"><i data-lucide="award" class="icon"></i><span class="label">Best Answer</span><span class="badge badge-emerald">{{ report.best_answer.score }}/10</span></div>
+        <p class="q-text">{{ report.best_answer.question_text }}</p>
+    </div>
+    {% endif %}
+    {% if report.worst_answer %}
+    <div class="card highlight-card worst">
+        <div class="top-row"><i data-lucide="triangle-alert" class="icon"></i><span class="label">Needs Work</span><span class="badge badge-amber">{{ report.worst_answer.score }}/10</span></div>
+        <p class="q-text">{{ report.worst_answer.question_text }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if session.summary %}
+<div class="card summary-card">
+    <h3><i data-lucide="sparkles" class="icon"></i>AI Feedback Summary</h3>
+    <p class="text">{{ session.summary }}</p>
+</div>
+{% endif %}
+
+<h3 class="breakdown-title">Question Breakdown</h3>
+<div class="breakdown-list" style="margin-bottom:28px;">
+    {% for answer in report.answers %}
+    <details class="qa-item">
+        <summary>
+            <div class="q-left">
+                <span class="q-num">{{ loop.index }}</span>
+                <span class="q-title">{{ answer.question_text }}</span>
+            </div>
+            <div class="q-right">
+                <span class="q-score" style="color:{{ 'var(--emerald-text)' if answer.score >= 7 else ('var(--primary)' if answer.score >= 5 else ('var(--amber-text)' if answer.score >= 3 else 'var(--red)')) }};">{{ answer.score }}/10</span>
+                <i data-lucide="chevron-right" class="icon chevron"></i>
+            </div>
+        </summary>
+        <div class="qa-body">
+            <div>
+                <p class="label">Your Answer</p>
+                <p class="value">{{ answer.answer_text }}</p>
+            </div>
+            {% if answer.strengths %}
+            <div>
+                <p class="label" style="color:var(--emerald-text);">Strengths</p>
+                <ul class="detail-list strengths">
+                    {% for s in answer.strengths %}<li><span class="dot"></span><span>{{ s }}</span></li>{% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if answer.suggestions %}
+            <div>
+                <p class="label" style="color:var(--amber-text);">Suggestions</p>
+                <ul class="detail-list suggestions">
+                    {% for s in answer.suggestions %}<li><span class="dot"></span><span>{{ s }}</span></li>{% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if answer.improved_answer %}
+            <div class="improved-box">
+                <p class="label">Improved Answer</p>
+                <!-- Raw markdown text stored safely in a data attribute (Jinja
+                     auto-escapes it, verified round-trips correctly through
+                     HTML entity encoding/decoding) and rendered into real
+                     HTML client-side on load, using the same renderMarkdown()
+                     logic already used and tested on the live interview page. -->
+                <div class="markdown-content" data-markdown="{{ answer.improved_answer }}"></div>
+            </div>
+            {% endif %}
+            {% if answer.filler_word_count %}
+            <p class="value muted">Filler words: {{ answer.filler_word_count }}</p>
+            {% endif %}
+        </div>
+    </details>
+    {% endfor %}
+</div>
+
+<div class="report-actions">
+    <a class="btn-secondary" href="{{ url_for('home') }}"><i data-lucide="house" class="icon" style="width:15px;height:15px;"></i>Home</a>
+    <a class="btn-secondary" href="{{ url_for('download_report_pdf', session_id=session.id) }}"><i data-lucide="download" class="icon" style="width:15px;height:15px;"></i>Download Report</a>
+    <a class="btn-primary" href="{{ url_for('home') }}"><i data-lucide="rotate-ccw" class="icon" style="width:15px;height:15px;"></i>New Interview</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    // Same markdown renderer used on the live interview page (interview.js),
+    // duplicated here since this page has no shared JS bundle. Escapes HTML
+    // first (untrusted LLM-generated text) then applies a small set of
+    // markdown patterns on top of the escaped text.
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function inlineMarkdown(str) {
+        return str
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/`([^`]+)`/g, "<code>$1</code>");
+    }
+
+    function renderMarkdown(text) {
+        const escaped = escapeHtml(text);
+        const blocks = escaped.split(/\n\s*\n/);
+        return blocks.map(block => {
+            const trimmed = block.trim();
+            if (!trimmed) return "";
+
+            const codeMatch = trimmed.match(/^```(\w*)\n([\s\S]*?)\n?```$/);
+            if (codeMatch) {
+                return `<pre><code>${codeMatch[2]}</code></pre>`;
+            }
+
+            const lines = trimmed.split("\n").map(l => l.trim()).filter(Boolean);
+            const isList = lines.length > 0 && lines.every(l => /^[-*]\s+/.test(l));
+            if (isList) {
+                const items = lines.map(l => `<li>${inlineMarkdown(l.replace(/^[-*]\s+/, ""))}</li>`).join("");
+                return `<ul>${items}</ul>`;
+            }
+
+            return `<p>${inlineMarkdown(trimmed.replace(/\n/g, "<br>"))}</p>`;
+        }).join("");
+    }
+
+    document.querySelectorAll(".markdown-content[data-markdown]").forEach(el => {
+        el.innerHTML = renderMarkdown(el.dataset.markdown);
+    });
+})();
+</script>
+{% endblock %}

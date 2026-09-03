@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}AI Interview Simulator — Practice & Master Your Interview Skills{% endblock %}
+{% block content %}
+
+<div id="step-role">
+    <section class="landing-hero full-bleed animate-fade-in">
+        <div class="hero-blob"></div>
+        <div class="hero-inner">
+            <span class="eyebrow eyebrow-pulse">
+                <span class="pulse-dot"><span class="ping"></span><span class="dot"></span></span>
+                AI-Powered Mock Interviews
+            </span>
+            <h1>Master Your <span class="gradient-text">Interview Skills</span><br>with AI-Powered Practice</h1>
+            <p>Choose a role, answer real interview questions, and get instant AI feedback with scores, strengths, and suggested improvements. Practice with voice or text — anytime.</p>
+            <div class="hero-cta-row">
+                <button type="button" class="btn-accent" id="hero-start-btn">
+                    <i data-lucide="zap" class="icon" style="width:18px;height:18px;"></i>Start Practicing Now
+                    <i data-lucide="arrow-right" class="icon" style="width:18px;height:18px;"></i>
+                </button>
+                <button type="button" class="btn-secondary" id="scroll-how-btn">See How It Works</button>
+            </div>
+            <div class="stats-row">
+                <div class="stat-card"><i data-lucide="briefcase" class="icon"></i><div class="val">6</div><div class="lbl">Job Roles</div></div>
+                <div class="stat-card"><i data-lucide="layers" class="icon"></i><div class="val">100+</div><div class="lbl">Questions</div></div>
+                <div class="stat-card"><i data-lucide="gauge" class="icon"></i><div class="val">3</div><div class="lbl">Difficulty Levels</div></div>
+                <div class="stat-card"><i data-lucide="award" class="icon"></i><div class="val">10/10</div><div class="lbl">Detailed Scoring</div></div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-head" id="role-section">
+        <h2>Choose Your Job Role</h2>
+        <p>Select the position you want to practice for. Each role has tailored questions.</p>
+    </div>
+
+    <div id="error" class="error-box hidden"></div>
+
+    <div class="role-grid" id="role-grid">
+        {% for role in role_meta %}
+        <button type="button" class="card card-hover role-card" data-role-id="{{ role.id }}">
+            <span class="icon-box"><i data-lucide="{{ role.icon }}" class="icon"></i></span>
+            <h3>{{ role.name }}</h3>
+            <p class="desc">{{ role.description }}</p>
+            <div class="topic-badges">
+                {% for topic in role.topics[:3] %}
+                <span class="badge badge-slate">{{ topic }}</span>
+                {% endfor %}
+                {% if role.topics|length > 3 %}
+                <span class="badge badge-slate">+{{ role.topics|length - 3 }}</span>
+                {% endif %}
+            </div>
+            <span class="cta">Start practicing <i data-lucide="arrow-right" class="icon" style="width:15px;height:15px;"></i></span>
+        </button>
+        {% endfor %}
+    </div>
+
+    <section id="how-it-works" class="how-section">
+        <div class="section-head center">
+            <h2>How It Works</h2>
+            <p>Four simple steps to interview readiness.</p>
+        </div>
+        <div class="steps-grid">
+            <div class="step-card">
+                <span class="icon-box"><i data-lucide="layers" class="icon"></i></span>
+                <div class="step-title-row"><span class="step-num">1</span><h4>Select Role</h4></div>
+                <p>Pick your job role, difficulty, and interviewer style</p>
+                <i data-lucide="arrow-right" class="icon step-connector"></i>
+            </div>
+            <div class="step-card">
+                <span class="icon-box"><i data-lucide="brain-circuit" class="icon"></i></span>
+                <div class="step-title-row"><span class="step-num">2</span><h4>Answer Questions</h4></div>
+                <p>Type or speak your answers to real interview questions</p>
+                <i data-lucide="arrow-right" class="icon step-connector"></i>
+            </div>
+            <div class="step-card">
+                <span class="icon-box"><i data-lucide="sparkles" class="icon"></i></span>
+                <div class="step-title-row"><span class="step-num">3</span><h4>Get Feedback</h4></div>
+                <p>AI scores and analyzes each answer instantly</p>
+                <i data-lucide="arrow-right" class="icon step-connector"></i>
+            </div>
+            <div class="step-card">
+                <span class="icon-box"><i data-lucide="check" class="icon"></i></span>
+                <div class="step-title-row"><span class="step-num">4</span><h4>Review Report</h4></div>
+                <p>See strengths, gaps, and download your final report</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="features-section">
+        <div class="section-head center">
+            <h2>Everything You Need to Ace It</h2>
+            <p>Professional-grade tools for interview preparation.</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <span class="icon-box grad-blue-cyan"><i data-lucide="brain-circuit" class="icon"></i></span>
+                <h3>AI-Powered Analysis</h3>
+                <p>Every answer is scored on keyword coverage, structure, clarity, and depth — with instant actionable feedback.</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon-box grad-emerald-teal"><i data-lucide="mic" class="icon"></i></span>
+                <h3>Voice or Text Input</h3>
+                <p>Type your answers or use speech-to-text to simulate a real conversation. Perfect for practicing out loud.</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon-box grad-amber-orange"><i data-lucide="trending-up" class="icon"></i></span>
+                <h3>Performance Tracking</h3>
+                <p>Every session is saved to your history. Track progress over time and see where you improve.</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon-box grad-rose-pink"><i data-lucide="shield" class="icon"></i></span>
+                <h3>Multiple Interviewer Styles</h3>
+                <p>Practice with a friendly, professional, or strict interviewer — each adjusts feedback tone and scoring.</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon-box grad-violet-blue"><i data-lucide="zap" class="icon"></i></span>
+                <h3>Instant Feedback</h3>
+                <p>Get scores, strengths, missed concepts, and a model improved answer immediately after each response.</p>
+            </div>
+            <div class="feature-card">
+                <span class="icon-box grad-cyan-blue"><i data-lucide="award" class="icon"></i></span>
+                <h3>Detailed Final Report</h3>
+                <p>Category breakdowns, best and worst answers, skill analysis, and downloadable reports after each interview.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="privacy-section full-bleed">
+        <div class="section-head center">
+            <h2>Runs Entirely on Your Machine</h2>
+            <p>No cloud AI, no accounts, no data leaving your device.</p>
+        </div>
+        <div class="privacy-grid">
+            <div class="privacy-card">
+                <span class="icon-box"><i data-lucide="shield-check" class="icon"></i></span>
+                <h3>100% Local AI</h3>
+                <p>Every question and every score is generated by a Llama model running on your own hardware via Ollama — nothing is ever sent to a remote server.</p>
+            </div>
+            <div class="privacy-card">
+                <span class="icon-box"><i data-lucide="user-x" class="icon"></i></span>
+                <h3>No Signup Required</h3>
+                <p>Jump straight into a mock interview. There's no account, no email, and no login screen standing between you and practice.</p>
+            </div>
+            <div class="privacy-card">
+                <span class="icon-box"><i data-lucide="infinity" class="icon"></i></span>
+                <h3>Unlimited Practice</h3>
+                <p>No API costs, no rate limits, no usage caps. Run as many interviews as you want, as often as you want.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-banner">
+        <div class="cta-banner-inner">
+            <h2>Ready to Land Your Dream Job?</h2>
+            <p>Start your first mock interview now. It's free, instant, and requires no signup.</p>
+            <button type="button" class="btn-white" id="cta-start-btn">
+                <i data-lucide="play" class="icon" style="width:18px;height:18px;"></i>Start Your First Interview
+                <i data-lucide="arrow-right" class="icon" style="width:18px;height:18px;"></i>
+            </button>
+        </div>
+    </section>
+</div>
+
+<div id="step-config" class="hidden">
+    <button type="button" class="btn-ghost" id="back-btn" style="margin-left:-8px;margin-bottom:20px;">
+        <i data-lucide="arrow-left" class="icon" style="width:15px;height:15px;"></i>Back to roles
+    </button>
+
+    <div class="animate-slide-up">
+        <div class="config-header">
+            <span class="icon-box" id="config-icon-box"></span>
+            <div>
+                <h2 id="config-name"></h2>
+                <p id="config-desc"></p>
+            </div>
+        </div>
+
+        <div class="section-head">
+            <h2 style="display:flex;align-items:center;gap:8px;font-size:1.05rem;"><i data-lucide="bar-chart-2" class="icon" style="width:17px;height:17px;color:var(--primary);"></i>Difficulty Level</h2>
+        </div>
+        <div class="option-grid" id="difficulty-grid">
+            {% for d in difficulty_meta %}
+            <button type="button" class="card card-hover option-card {{ 'selected' if d.id == 'medium' else '' }}" data-value="{{ d.id }}" data-questions="{{ d.question_count }}" aria-pressed="{{ 'true' if d.id == 'medium' else 'false' }}">
+                <div class="top-row">
+                    <i data-lucide="{{ 'zap' if d.id == 'easy' else ('flame' if d.id == 'hard' else 'gauge') }}" class="icon"></i>
+                    <i data-lucide="check" class="icon check {{ '' if d.id == 'medium' else 'hidden' }}"></i>
+                </div>
+                <div class="name">{{ d.name }}</div>
+                <div class="desc">{{ d.description }}</div>
+                <div class="meta"><i data-lucide="clock" class="icon"></i>{{ d.question_count }} questions</div>
+            </button>
+            {% endfor %}
+        </div>
+
+        <div class="section-head" style="margin-top:28px;">
+            <h2 style="display:flex;align-items:center;gap:8px;font-size:1.05rem;"><i data-lucide="message-circle" class="icon" style="width:17px;height:17px;color:var(--primary);"></i>Interviewer Personality</h2>
+        </div>
+        <div class="option-grid" id="personality-grid">
+            {% for p in personality_meta %}
+            <button type="button" class="card card-hover option-card {{ 'selected' if p.id == 'professional' else '' }}" data-value="{{ p.id }}" aria-pressed="{{ 'true' if p.id == 'professional' else 'false' }}">
+                <div class="top-row">
+                    <i data-lucide="{{ p.icon }}" class="icon"></i>
+                    <i data-lucide="check" class="icon check {{ '' if p.id == 'professional' else 'hidden' }}"></i>
+                </div>
+                <div class="name">{{ p.name }}</div>
+                <div class="desc">{{ p.description }}</div>
+            </button>
+            {% endfor %}
+        </div>
+
+        <div class="section-head" style="margin-top:28px;">
+            <h2 style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-2);">Topics Covered</h2>
+        </div>
+        <div class="topic-badges" id="config-topics" style="margin-bottom:28px;"></div>
+
+        <div class="summary-box">
+            <p>You will answer <strong><span id="summary-count"></span> questions</strong> as a <strong id="summary-role"></strong>. Type or speak your answers.</p>
+            <button class="btn-primary btn-block" id="start-btn" style="max-width:280px;">
+                <i data-lucide="play" class="icon" style="width:17px;height:17px;"></i>Start Interview
+            </button>
+            <div class="hidden" id="starting-status" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+                <div class="spinner" style="width:40px;height:40px;">
+                    <div class="ring" style="width:40px;height:40px;border-width:3px;"></div>
+                </div>
+                <p style="margin:0;font-size:.85rem;color:var(--muted);">Setting up your interview...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="role-data" type="application/json">{{ role_meta | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ROLES = JSON.parse(document.getElementById("role-data").textContent);
+
+const stepRole = document.getElementById("step-role");
+const stepConfig = document.getElementById("step-config");
+const errorBox = document.getElementById("error");
+
+let selectedRole = null;
+let selectedDifficulty = "medium";
+let selectedPersonality = "professional";
+let selectedQuestionCount = 5;
+
+function selectRole(role) {
+    if (!role) return;
+    selectedRole = role;
+
+    document.getElementById("config-icon-box").innerHTML = `<i data-lucide="${selectedRole.icon}" class="icon" style="width:30px;height:30px;color:#fff;"></i>`;
+    document.getElementById("config-name").textContent = selectedRole.name;
+    document.getElementById("config-desc").textContent = selectedRole.description;
+    document.getElementById("summary-role").textContent = selectedRole.name;
+
+    const topicsBox = document.getElementById("config-topics");
+    topicsBox.innerHTML = "";
+    selectedRole.topics.forEach(t => {
+        const span = document.createElement("span");
+        span.className = "badge badge-slate";
+        span.textContent = t;
+        topicsBox.appendChild(span);
+    });
+
+    stepRole.classList.add("hidden");
+    stepConfig.classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.getElementById("role-grid").addEventListener("click", (e) => {
+    const card = e.target.closest(".role-card");
+    if (!card) return;
+    selectRole(ROLES.find(r => r.id === card.dataset.roleId));
+});
+
+document.getElementById("hero-start-btn").addEventListener("click", () => selectRole(ROLES[0]));
+document.getElementById("cta-start-btn").addEventListener("click", () => selectRole(ROLES[0]));
+document.getElementById("scroll-how-btn").addEventListener("click", () => {
+    document.getElementById("how-it-works").scrollIntoView({ behavior: "smooth" });
+});
+
+document.getElementById("back-btn").addEventListener("click", () => {
+    stepConfig.classList.add("hidden");
+    stepRole.classList.remove("hidden");
+    selectedRole = null;
+});
+
+function selectCard(group, value, extra) {
+    [...group.children].forEach(c => {
+        const isMatch = c.dataset.value === value;
+        c.classList.toggle("selected", isMatch);
+        c.querySelector(".check").classList.toggle("hidden", !isMatch);
+        // Selection state was previously conveyed only visually (border +
+        // checkmark icon) with nothing exposed to assistive tech.
+        c.setAttribute("aria-pressed", String(isMatch));
+    });
+    if (extra) extra();
+}
+
+const difficultyGrid = document.getElementById("difficulty-grid");
+difficultyGrid.addEventListener("click", (e) => {
+    const card = e.target.closest(".option-card");
+    if (!card) return;
+    selectedDifficulty = card.dataset.value;
+    selectedQuestionCount = parseInt(card.dataset.questions, 10);
+    document.getElementById("summary-count").textContent = selectedQuestionCount;
+    selectCard(difficultyGrid, selectedDifficulty);
+});
+
+const personalityGrid = document.getElementById("personality-grid");
+personalityGrid.addEventListener("click", (e) => {
+    const card = e.target.closest(".option-card");
+    if (!card) return;
+    selectedPersonality = card.dataset.value;
+    selectCard(personalityGrid, selectedPersonality);
+});
+
+document.getElementById("summary-count").textContent = selectedQuestionCount;
+
+const startBtn = document.getElementById("start-btn");
+const startingStatus = document.getElementById("starting-status");
+
+startBtn.addEventListener("click", async () => {
+    if (!selectedRole || startBtn.disabled) return;
+    errorBox.classList.add("hidden");
+    startBtn.disabled = true;
+    startBtn.classList.add("hidden");
+    startingStatus.classList.remove("hidden");
+
+    try {
+        const res = await fetch("/api/session/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                role: selectedRole.name,
+                difficulty: selectedDifficulty,
+                personality: selectedPersonality,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Couldn't start the interview.");
+        window.location.href = `/interview/${data.session_id}`;
+    } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.remove("hidden");
+        startingStatus.classList.add("hidden");
+        startBtn.classList.remove("hidden");
+        startBtn.disabled = false;
+        errorBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+});
+</script>
+{% endblock %}

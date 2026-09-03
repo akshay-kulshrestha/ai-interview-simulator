@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Interview - {{ session.role }}{% endblock %}
+{% block content %}
+
+{% if session.status == 'completed' %}
+<div class="card empty-state">
+    <span class="icon-box"><i data-lucide="check-circle-2" class="icon"></i></span>
+    <h1>This interview is already finished</h1>
+    <p class="muted">You've already answered every question in this session.</p>
+    <a class="btn-primary" style="margin-top:16px;" href="{{ url_for('report_page', session_id=session.id) }}">View Report</a>
+</div>
+{% else %}
+
+<div class="interview-topbar">
+    <a class="btn-ghost" href="{{ url_for('home') }}" style="margin-left:-8px;">
+        <i data-lucide="x" class="icon" style="width:15px;height:15px;"></i>Exit
+    </a>
+    <div class="interview-topbar-right">
+        <span class="persona-badge" id="persona-badge"></span>
+        <div class="q-counter"><strong id="question-counter"></strong></div>
+    </div>
+</div>
+<div class="segmented-progress" id="segmented-progress"></div>
+<div class="progress-pct" id="progress-pct"></div>
+
+<div id="error" class="error-box hidden" style="margin-bottom:16px;"></div>
+
+{% if question and question.order_index == 0 %}
+<div class="greeting-card" id="greeting-card">
+    <span class="avatar"><i data-lucide="sparkles" class="icon"></i></span>
+    <div>
+        <p class="title">{{ session.role }} Interview</p>
+        <p class="msg">{{ greetings.get(session.personality, '') }}</p>
+    </div>
+</div>
+{% endif %}
+
+<div id="question-view">
+    <div class="card question-card" id="question-card">
+        <div class="top-row">
+            <span class="badge" id="category-badge"></span>
+            <span class="time-left" id="timer"><i data-lucide="clock" class="icon"></i><span id="timer-text">00:00</span></span>
+        </div>
+        <p class="question-text" id="question-text"></p>
+        <button type="button" class="hints-toggle" id="hints-toggle">
+            <i data-lucide="lightbulb" class="icon"></i><span id="hints-toggle-text">Need a hint?</span>
+            <i data-lucide="chevron-down" class="icon" id="hints-chevron"></i>
+        </button>
+        <ul class="hints-list hidden" id="hints-list"></ul>
+    </div>
+
+    <div class="card answer-card">
+        <div class="answer-head">
+            <label for="answer-box">Your Answer</label>
+            <div class="quality-meter">
+                <span class="quality-label" id="quality-label">Start typing...</span>
+                <span class="quality-track"><span class="quality-fill none" id="quality-fill"></span></span>
+            </div>
+        </div>
+        <textarea id="answer-box" class="input-field" rows="6" placeholder="Type your answer here, or use the microphone to speak..." autofocus></textarea>
+        <div id="mic-error" class="mic-error hidden"><i data-lucide="mic-off" class="icon"></i><span id="mic-error-text"></span></div>
+        <div class="answer-toolbar">
+            <div class="answer-toolbar-left">
+                <button type="button" class="speak-btn" id="mic-btn"><i data-lucide="mic" class="icon" id="mic-icon-on"></i><i data-lucide="square" class="icon hidden" id="mic-icon-off"></i><span id="mic-label">Speak</span></button>
+                <span class="word-count"><span id="word-count">0</span> words</span>
+            </div>
+            <button class="btn-primary" id="submit-btn"><i data-lucide="send" class="icon" style="width:15px;height:15px;"></i>Submit Answer</button>
+        </div>
+        <p class="hint-key">Press Cmd/Ctrl + Enter to submit</p>
+    </div>
+</div>
+
+<div class="analyzing hidden" id="analyzing-view">
+    <div class="spinner"><div class="ring"></div><i data-lucide="brain-circuit" class="icon"></i></div>
+    <h3>Analyzing your answer...</h3>
+    <div class="analyzing-steps" id="analyzing-steps"></div>
+</div>
+
+<div class="hidden animate-slide-up" id="feedback-view" style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card feedback-recap">
+        <span class="badge" id="recap-badge"></span>
+        <p class="q-text" id="recap-question"></p>
+        <div class="a-box">
+            <p class="label">Your Answer</p>
+            <p class="text" id="recap-answer"></p>
+        </div>
+    </div>
+
+    <div class="card score-panel">
+        <div class="score-ring-wrap" id="feedback-score-ring"></div>
+        <div class="verdict">
+            <h3 id="verdict-title"></h3>
+            <p id="verdict-sub"></p>
+        </div>
+    </div>
+
+    <div class="filler-note hidden" id="filler-note"></div>
+
+    <div class="card feedback-block strengths hidden" id="strengths-block">
+        <h4><i data-lucide="thumbs-up" class="icon"></i>Strengths</h4>
+        <ul class="detail-list strengths" id="strengths-list"></ul>
+    </div>
+
+    <div class="card feedback-block suggestions hidden" id="suggestions-block">
+        <h4><i data-lucide="trending-up" class="icon"></i>Suggestions for Improvement</h4>
+        <ul class="detail-list suggestions" id="suggestions-list"></ul>
+    </div>
+
+    <div class="card feedback-block hidden" id="improved-block" style="padding:0;">
+        <button type="button" class="improved-toggle" id="improved-toggle" aria-expanded="false" style="padding:20px;">
+            <span class="title-row"><i data-lucide="sparkles" class="icon" style="width:16px;height:16px;"></i>See an Improved Answer</span>
+            <i data-lucide="chevron-down" class="icon chevron"></i>
+        </button>
+        <div class="hidden" id="improved-body" style="padding:0 20px 20px;">
+            <!-- Was <p id="improved-answer">. Changed to <div>: interview.js
+                 now sets this element's innerHTML to rendered markdown, which
+                 can include block-level children (<p>, <ul>, <pre>) -- a <div>
+                 is the semantically correct container for that; a <p> is not
+                 meant to hold other block-level content. -->
+            <div class="improved-box"><div id="improved-answer"></div></div>
+        </div>
+    </div>
+
+    <button class="btn-primary btn-block" id="next-btn"></button>
+</div>
+
+<script id="session-data" type="application/json">
+{{ {"session_id": session.id, "total_questions": session.total_questions, "personality": session.personality, "question": question} | tojson }}
+</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/interview.js') }}"></script>
+{% endblock %}

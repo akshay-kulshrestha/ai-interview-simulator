@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Interview History - AI Interview Simulator{% endblock %}
+{% block content %}
+
+<div class="row between" style="align-items:flex-start;margin-bottom:32px;">
+    <div>
+        <h1 style="font-size:1.9rem;margin:0;">Interview History</h1>
+        <p class="muted" style="margin-top:4px;">Review your past practice sessions and track progress.</p>
+    </div>
+    <a href="{{ url_for('home') }}" class="btn-secondary">
+        <i data-lucide="arrow-left" class="icon" style="width:15px;height:15px;"></i><span>Back</span>
+    </a>
+</div>
+
+<div id="error" class="error-box hidden"></div>
+
+{% if sessions %}
+<div class="session-list">
+    {% for s in sessions %}
+    {% if s.status == 'completed' %}
+    {% set pct = (s.overall_score / 10 * 100)|round(0, 'common')|int %}
+    {% set color = pct_color(pct) %}
+    {% set ring = score_ring(s.overall_score, 10, 70, 6) %}
+    <div class="session-row" data-session-id="{{ s.id }}" data-href="{{ url_for('report_page', session_id=s.id) }}" role="link" tabindex="0">
+        <div class="score-ring-wrap" style="width:{{ ring.size }}px;height:{{ ring.size }}px;flex-shrink:0;">
+            <svg width="{{ ring.size }}" height="{{ ring.size }}">
+                <circle cx="{{ ring.center }}" cy="{{ ring.center }}" r="{{ ring.radius }}" fill="none" stroke="var(--ring-track)" stroke-width="{{ ring.stroke }}"></circle>
+                <circle cx="{{ ring.center }}" cy="{{ ring.center }}" r="{{ ring.radius }}" fill="none" stroke="{{ ring.color }}" stroke-width="{{ ring.stroke }}"
+                    stroke-dasharray="{{ ring.circumference }}" stroke-dashoffset="{{ ring.offset }}" stroke-linecap="round"></circle>
+            </svg>
+            <div class="center">
+                <span class="val" style="color:{{ ring.color }};font-size:1rem;">{{ "%.1f"|format(s.overall_score) }}</span>
+            </div>
+        </div>
+        <div class="session-main">
+            <div class="session-title-row">
+                <h3>{{ s.role }}</h3>
+                <span class="badge pct-badge" style="background-color:{{ color }}26;color:{{ color }};">{{ pct }}%</span>
+            </div>
+            <div class="session-meta">
+                <span><i data-lucide="calendar" class="icon"></i>{{ relative_time(s.started_at) }}</span>
+                <span style="text-transform:capitalize;"><i data-lucide="award" class="icon"></i>{{ s.difficulty }}</span>
+                <span><i data-lucide="clock" class="icon"></i>{{ s.total_questions }} questions</span>
+            </div>
+            {% if s.summary %}
+            <p class="session-summary">{{ s.summary.split('\n')[0] }}</p>
+            {% endif %}
+        </div>
+        <div class="session-actions">
+            <button type="button" class="delete-btn" title="Delete session"><i data-lucide="trash-2" class="icon"></i></button>
+            <i data-lucide="chevron-right" class="icon chevron-indicator"></i>
+        </div>
+    </div>
+    {% else %}
+    <div class="session-row" data-session-id="{{ s.id }}" data-href="{{ url_for('interview_page', session_id=s.id) }}" role="link" tabindex="0">
+        <span class="icon-box" style="width:70px;height:70px;flex-shrink:0;"><i data-lucide="{{ role_by_name.get(s.role, {}).get('icon', 'briefcase') }}" class="icon"></i></span>
+        <div class="session-main">
+            <div class="session-title-row">
+                <h3>{{ s.role }}</h3>
+                <span class="badge badge-slate">In progress</span>
+            </div>
+            <div class="session-meta">
+                <span><i data-lucide="calendar" class="icon"></i>{{ relative_time(s.started_at) }}</span>
+                <span style="text-transform:capitalize;"><i data-lucide="award" class="icon"></i>{{ s.difficulty }}</span>
+                <span><i data-lucide="clock" class="icon"></i>{{ s.total_questions }} questions</span>
+            </div>
+        </div>
+        <div class="session-actions">
+            <button type="button" class="delete-btn" title="Delete session"><i data-lucide="trash-2" class="icon"></i></button>
+            <i data-lucide="chevron-right" class="icon chevron-indicator"></i>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="card empty-state">
+    <span class="icon-box"><i data-lucide="inbox" class="icon"></i></span>
+    <h3 style="margin:0;font-size:1.1rem;">No interviews yet</h3>
+    <p class="muted" style="max-width:320px;margin:6px auto 0;">Start your first mock interview to see your results and track your progress over time.</p>
+    <a href="{{ url_for('home') }}" class="btn-primary" style="margin-top:20px;">
+        Start Interview<i data-lucide="arrow-right" class="icon" style="width:16px;height:16px;"></i>
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll(".session-row").forEach(row => {
+    row.addEventListener("click", () => {
+        window.location.href = row.dataset.href;
+    });
+    // Keyboard accessibility: rows are clickable divs (not real <a> tags,
+    // since the delete button needs to sit inside without becoming a nested
+    // interactive element), so Enter/Space need to be wired up manually to
+    // match the role="link" semantics declared on the element.
+    row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            window.location.href = row.dataset.href;
+        }
+    });
+
+    const deleteBtn = row.querySelector(".delete-btn");
+    let deleteInFlight = false;
+
+    deleteBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (deleteInFlight) return; // guards against a rapid double-click firing two DELETE requests
+        const sessionId = row.dataset.sessionId;
+        if (!confirm("Delete this interview session? This can't be undone.")) return;
+
+        deleteInFlight = true;
+        deleteBtn.disabled = true;
+        try {
+            const res = await fetch(`/api/session/${sessionId}`, { method: "DELETE" });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || "Could not delete this session.");
+            }
+            row.remove();
+        } catch (err) {
+            const errorBox = document.getElementById("error");
+            errorBox.textContent = err.message;
+            errorBox.classList.remove("hidden");
+            deleteInFlight = false;
+            deleteBtn.disabled = false;
+        }
+    });
+});
+</script>
+{% endblock %}
