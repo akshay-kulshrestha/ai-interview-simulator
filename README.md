@@ -49,3 +49,22 @@ per answer.
 | Frontend | Jinja2 templates, custom CSS/JS |
 
 ## Project structure
+ai_interview_simulator/
+├── app.py # Flask app, routes
+├── ai_analyzer.py # AI scoring/feedback logic (talks to Ollama)
+├── database.py # SQLite persistence
+├── interview.py # Interview flow / question logic
+├── report_pdf.py # PDF report generation
+├── requirements.txt
+├── env.example # Template for required environment variables
+├── static/
+│ ├── css/style.css
+│ └── js/interview.js
+├── templates/
+│ ├── base.html
+│ ├── setup.html # Role/difficulty selection
+│ ├── interview.html # Live interview screen
+│ ├── report.html # Final report view
+│ └── history.html # Past session history
+├── reports/ # Generated PDF reports
+└── data/ # SQLite database (created at runtime)
