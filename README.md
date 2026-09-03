@@ -49,7 +49,6 @@ per answer.
 | Frontend | Jinja2 templates, custom CSS/JS |
 
 ## Project structure
-
 ai_interview_simulator/
 ├── app.py # Flask app, routes
 ├── ai_analyzer.py # AI scoring/feedback logic (talks to Ollama)
