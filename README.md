@@ -49,62 +49,73 @@ per answer.
 | Frontend | Jinja2 templates, custom CSS/JS |
 
 ## Project structure
-ai_interview_simulator/
-├── app.py # Flask app, routes
-├── ai_analyzer.py # AI scoring/feedback logic (talks to Ollama)
-├── database.py # SQLite persistence
-├── interview.py # Interview flow / question logic
-├── report_pdf.py # PDF report generation
-├── requirements.txt
-├── env.example # Template for required environment variables
-├── static/
-│ ├── css/style.css
-│ └── js/interview.js
-├── templates/
-│ ├── base.html
-│ ├── setup.html # Role/difficulty selection
-│ ├── interview.html # Live interview screen
-│ ├── report.html # Final report view
-│ └── history.html # Past session history
-├── reports/ # Generated PDF reports
-└── data/ # SQLite database (created at runtime)
 
+```
+ai-interview-simulator/
+├── app.py                    # Flask app, routes
+├── ai_analyzer.py               # AI scoring/feedback logic (talks to Ollama)
+├── database.py                     # SQLite persistence
+├── interview.py                       # Interview flow / question logic
+├── report_pdf.py                         # PDF report generation
+├── requirements.txt
+├── env.example                             # Template for required environment variables
+├── .gitignore                                # Excludes .env, databases, and __pycache__
+├── README.md
+├── static/
+│   ├── css/style.css
+│   └── js/interview.js
+├── templates/
+│   ├── base.html                               # Shared layout, nav, footer
+│   ├── setup.html                                 # Role/difficulty selection
+│   ├── interview.html                               # Live interview screen
+│   ├── report.html                                    # Final report view
+│   └── history.html                                     # Past session history
+├── reports/                                               # Generated PDF reports
+└── data/
+    └── interviews.db                                        # SQLite database (created at runtime)
+```
 
 ## Setup
 
 ### 1. Install dependencies
 
+```
 pip install -r requirements.txt
-
+```
 
 ### 2. Set up environment variables
 
 Copy `env.example` to `.env` and fill in any required values.
 
+```
 copy env.example .env
-
+```
 
 ### 3. Install and start Ollama
 
 This project runs its AI analysis locally via [Ollama](https://ollama.com).
 
+```
 winget install Ollama.Ollama
-
+```
 
 In one terminal window, start the Ollama server (leave this running):
 
+```
 ollama serve
-
+```
 
 In a separate terminal, pull the model this project uses:
 
+```
 ollama pull llama3.2
-
+```
 
 ### 4. Run the app
 
+```
 python app.py
-
+```
 
 Then open `http://127.0.0.1:5001` in your browser.
 
