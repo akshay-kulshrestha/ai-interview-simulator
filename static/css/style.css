@@ -117,6 +117,42 @@ a:hover { color: var(--primary-dark); }
 
 .topbar nav a.active, .topbar nav a:hover { color: var(--text); background: var(--surface-muted-2); }
 
+/* Explicit gap rather than relying on inline HTML whitespace between the
+   badge/History/New Interview items -- precise and no longer sensitive to
+   how the template's markup happens to be formatted. */
+.topbar nav {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Thin visual separator between the informational badge and the two
+   actionable nav items, so the row doesn't read as one undifferentiated
+   cluster -- info on the left of the divider, actions on the right. */
+.topbar nav .badge {
+    cursor: help;
+    position: relative;
+    margin-right: 6px;
+    padding-right: 20px;
+}
+.topbar nav .badge::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+}
+
+@media (max-width: 640px) {
+    /* Screen space is tight on mobile -- keep History and drop the
+       purely informational badge, same priority call already made for
+       .brand-text-block above. */
+    .topbar nav .badge { display: none; }
+}
+
 .site-footer {
     text-align: center;
     color: var(--muted-2);

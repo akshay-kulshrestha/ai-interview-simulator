@@ -22,12 +22,10 @@
             </span>
         </a>
         <nav>
-            {% if current_page != 'setup' %}
-            <a href="{{ url_for('home') }}">
-                <i data-lucide="house" class="icon" style="width:16px;height:16px;"></i>
-                <span>Home</span>
-            </a>
-            {% endif %}
+            <span class="badge badge-emerald" title="Runs entirely on your machine -- no cloud AI, no data leaves your device">
+                <i data-lucide="shield-check" class="icon" style="width:13px;height:13px;"></i>
+                <span>100% Local AI</span>
+            </span>
             <a href="{{ url_for('history_page') }}" class="{{ 'active' if current_page == 'history' else '' }}">
                 <i data-lucide="clock" class="icon" style="width:16px;height:16px;"></i>
                 <span>History</span>

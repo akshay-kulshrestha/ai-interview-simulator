@@ -6,14 +6,16 @@ from fpdf import FPDF
 BASE_DIR = os.path.dirname(__file__)
 REPORTS_DIR = os.environ.get("REPORTS_DIR", os.path.join(BASE_DIR, "reports"))
 
-# The core PDF fonts (Helvetica/Times/Courier) only support Latin-1, but text
-# reaching this module comes from an LLM (improved_answer, summary) and is
-# never guaranteed to stay within that range -- smart quotes, em dashes, and
-# bullet characters are all common, ordinary model output and every one of
-# them raises FPDFUnicodeEncodingException with the core font, crashing the
-# PDF download entirely. Map the common cases to clean ASCII, then fall back
-# to safely dropping anything still unsupported (e.g. emoji) so a single
-# unexpected character can never break the whole report.
+# The core PDF fonts (Helvetica/Times/Courier) only support Latin-1. Kept
+# as defensive cleanup even though improved_answer/summary are now built
+# from plain Python string templates (not LLM output) rather than a model
+# that could emit arbitrary Unicode -- smart quotes, em dashes, and bullet
+# characters can still show up in a candidate's own typed answer, and any
+# one of them raises FPDFUnicodeEncodingException with the core font,
+# crashing the PDF download entirely. Map the common cases to clean ASCII,
+# then fall back to safely dropping anything still unsupported (e.g. an
+# emoji someone typed) so a single unexpected character can never break
+# the whole report.
 UNICODE_REPLACEMENTS = {
     "\u2018": "'", "\u2019": "'",   # curly single quotes
     "\u201c": '"', "\u201d": '"',   # curly double quotes

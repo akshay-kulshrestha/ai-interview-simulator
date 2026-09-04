@@ -124,8 +124,7 @@ def handle_unexpected_error(exc):
     if request.path.startswith("/api/"):
         return jsonify({"error": "Something went wrong on the server. Please try again."}), 500
     return (
-        "<h1>Something went wrong</h1><p>Please go back and try again. "
-        "If this keeps happening, check that Ollama is running.</p>",
+        "<h1>Something went wrong</h1><p>Please go back and try again.</p>",
         500,
     )
 
@@ -261,8 +260,9 @@ def download_report_pdf(session_id):
 
 @app.route("/api/warmup")
 def api_warmup():
-    """Hit this right before a demo to force-load the model into memory
-    (and refresh its 30-minute keep-alive) even if the server has been idle."""
+    """Hit this right before a demo to make sure the local scoring model
+    (TF-IDF vectorizer, fit once at import time) is ready, even if this is
+    the very first request the process has handled."""
     ai_analyzer.warm_up()
     return jsonify({"ok": True})
 
@@ -283,8 +283,9 @@ def api_delete_session(session_id):
 
 database.init_db()
 
-# Load the model into memory in the background as soon as the server starts,
-# so the founder's first click doesn't eat a slow cold-start.
+# Confirm the local TF-IDF scoring model is ready as soon as the server
+# starts (it's already fit at import time -- this just logs that it's
+# available, in a background thread so it can't delay startup).
 threading.Thread(target=ai_analyzer.warm_up, daemon=True).start()
 
 if __name__ == "__main__":
