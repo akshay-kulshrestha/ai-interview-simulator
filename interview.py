@@ -1,8 +1,8 @@
 """Interview session orchestration: question sequencing, scoring, and the
-final report, built on top of ai_analyzer (Ollama) and database (SQLite)."""
+final report, built on top of ai_analyzer (local TF-IDF scoring, no
+external service) and database (SQLite)."""
 
 import json
-import random
 from datetime import datetime, timezone
 
 import ai_analyzer
@@ -74,98 +74,6 @@ QUESTIONS_BY_DIFFICULTY = {d["id"]: d["question_count"] for d in DIFFICULTY_META
 
 CATEGORY_CYCLE = ["technical", "behavioral", "technical", "problem-solving"]
 
-# Hand-written opening questions, keyed by role. The very first question of a
-# session is served from here instead of calling Ollama, so "Start Interview"
-# responds instantly on CPU-only hardware — every question after this one,
-# plus all hints, scoring, and the closing summary, still come from live
-# generation.
-STARTER_QUESTIONS = {
-    "Python Developer": [
-        {
-            "question": "What is the difference between a Python list and a tuple, and when would you use one over the other?",
-            "hints": ["Think about mutability", "Consider performance implications", "Think about the intended use case"],
-        },
-        {
-            "question": "Explain what a Python decorator is and give an example of when you'd use one.",
-            "hints": ["Think about wrapping functions", "Consider logging or timing use cases", "Mention the @ syntax"],
-        },
-        {
-            "question": "How does Python's garbage collection work, and what role does reference counting play?",
-            "hints": ["Start with reference counting", "Mention cyclic references", "Consider the generational garbage collector"],
-        },
-    ],
-    "Data Scientist": [
-        {
-            "question": "What is the difference between supervised and unsupervised learning?",
-            "hints": ["Think about whether the data has labels", "Give an example of each", "Mention typical algorithms"],
-        },
-        {
-            "question": "Explain what overfitting is and describe two ways to prevent it.",
-            "hints": ["Think about model complexity vs. data size", "Mention regularization", "Mention cross-validation"],
-        },
-        {
-            "question": "How would you handle missing data in a dataset?",
-            "hints": ["Consider why the data might be missing", "List a few imputation strategies", "Think about when to drop vs. impute"],
-        },
-    ],
-    "Web Developer": [
-        {
-            "question": "What is the difference between a GET and a POST HTTP request?",
-            "hints": ["Think about idempotency", "Consider where parameters go", "Think about caching behavior"],
-        },
-        {
-            "question": "Explain the CSS box model.",
-            "hints": ["List the four layers in order", "Explain box-sizing", "Think about how total size is calculated"],
-        },
-        {
-            "question": "What is the difference between localStorage, sessionStorage, and cookies?",
-            "hints": ["Compare storage size", "Compare persistence and lifetime", "Consider whether it's sent to the server"],
-        },
-    ],
-    "Software Engineer": [
-        {
-            "question": "What is the time complexity of binary search, and why does it require sorted data?",
-            "hints": ["Think about how the search space shrinks", "Consider Big-O notation", "Think about why order matters"],
-        },
-        {
-            "question": "Explain the difference between a stack and a queue, with a real-world example of each.",
-            "hints": ["Think about LIFO vs. FIFO", "Give a concrete use case for each", "Consider how items are added and removed"],
-        },
-        {
-            "question": "What is the difference between composition and inheritance in object-oriented design?",
-            "hints": ["Think about 'is-a' vs. 'has-a'", "Consider flexibility tradeoffs", "Mention when you'd favor one over the other"],
-        },
-    ],
-    "AI Engineer": [
-        {
-            "question": "What is the difference between a decoder-only and an encoder-decoder transformer architecture?",
-            "hints": ["Think about autoregressive generation", "Consider typical use cases for each", "Mention example models"],
-        },
-        {
-            "question": "Explain what embeddings are and why they're useful in NLP or retrieval systems.",
-            "hints": ["Think about representing meaning as vectors", "Mention similarity search", "Give an example use case"],
-        },
-        {
-            "question": "What is the purpose of a vector database, and how does it differ from a traditional database?",
-            "hints": ["Think about similarity search vs. exact match", "Mention nearest-neighbor search", "Consider embeddings as input"],
-        },
-    ],
-    "DevOps Engineer": [
-        {
-            "question": "What is the difference between a Docker image and a Docker container?",
-            "hints": ["Think about blueprint vs. running instance", "Consider image layers", "Mention how many containers one image can produce"],
-        },
-        {
-            "question": "What is the purpose of a CI/CD pipeline?",
-            "hints": ["Think about automation goals", "Consider testing before deploy", "Mention faster, safer releases"],
-        },
-        {
-            "question": "Explain the difference between horizontal and vertical scaling.",
-            "hints": ["Think about adding more machines vs. bigger machines", "Consider cost and complexity tradeoffs", "Mention when each is preferred"],
-        },
-    ],
-}
-
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
@@ -201,22 +109,16 @@ def start_session(conn, role, difficulty, personality):
 def _ask_next_question(conn, session_id, role, difficulty, personality, index):
     category = category_for_index(index)
 
-    starters = STARTER_QUESTIONS.get(role)
-    if index == 0 and starters:
-        pick = random.choice(starters)
-        question_text = pick["question"]
-        hints_json = json.dumps(pick["hints"])
-    else:
-        previous = [
-            r["question_text"]
-            for r in conn.execute(
-                "SELECT question_text FROM questions WHERE session_id = ? ORDER BY order_index",
-                (session_id,),
-            ).fetchall()
-        ]
-        topics = ROLE_BY_NAME.get(role, {}).get("topics")
-        question_text = ai_analyzer.generate_question(role, difficulty, category, personality, previous, topics)
-        hints_json = "[]"
+    previous = [
+        r["question_text"]
+        for r in conn.execute(
+            "SELECT question_text FROM questions WHERE session_id = ? ORDER BY order_index",
+            (session_id,),
+        ).fetchall()
+    ]
+    topics = ROLE_BY_NAME.get(role, {}).get("topics")
+    question_text = ai_analyzer.generate_question(role, difficulty, category, personality, previous, topics)
+    hints_json = "[]"
 
     cursor = conn.execute(
         """
@@ -326,7 +228,10 @@ def get_or_create_next_question(conn, session_id):
     """Fetch the next unanswered question, generating it if it doesn't exist yet.
     Split out of submit_answer so answer feedback comes back fast; the client
     kicks this off separately (in the background, while the user reads their
-    feedback) instead of bundling two Ollama calls into one request."""
+    feedback) instead of bundling two AI calls into one request. Both calls
+    are effectively instant with the local TF-IDF backend, but keeping
+    them split still avoids compounding two calls' worst-case latency
+    into a single response."""
     session = get_session(conn, session_id)
     if session is None:
         raise ValueError("Session not found")
@@ -351,7 +256,7 @@ def get_or_create_next_question(conn, session_id):
 def _complete_session(conn, session):
     """Mark the session finished and store its (fast, DB-only) overall score.
     The closing summary is deliberately NOT generated here -- it's the same
-    class of extra Ollama call that get_or_create_next_question was already
+    class of extra AI call that get_or_create_next_question was already
     split out to avoid stacking onto a slow response. Generating it here
     would make finishing the interview slower than every other question
     (analyze_answer's call *plus* a summary call, back to back). Instead it's
@@ -374,7 +279,7 @@ def _complete_session(conn, session):
 def _ensure_summary(conn, session):
     """Generate and cache the closing summary on first access. Cheap on every
     call after the first -- returns the cached value straight from `session`
-    without hitting Ollama again."""
+    without regenerating it again."""
     if session["summary"] is not None:
         return session["summary"]
 
@@ -388,7 +293,7 @@ def _ensure_summary(conn, session):
             answers,
         )
     except ai_analyzer.OllamaError:
-        summary = "Summary unavailable (couldn't reach the AI model)."
+        summary = "Summary unavailable."
 
     conn.execute("UPDATE sessions SET summary = ? WHERE id = ?", (summary, session["id"]))
     conn.commit()
